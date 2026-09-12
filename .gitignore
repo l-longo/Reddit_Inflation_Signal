@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+
+# raw Reddit data -- never publish (post titles and comment bodies)
+labelled_data/
+
+# generated output: everything below is rebuilt by run_all.sh
+results/
+figures/
+figures_paper/
+logs/
+
+# data_fed_nowcast holds both an input and generated output: the Cleveland Fed
+# nowcast files are inputs and are tracked, the model output files are not
+data_fed_nowcast/*
+!data_fed_nowcast/Year-Over-YearPercentChange-*.csv
