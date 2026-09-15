@@ -3,8 +3,8 @@
 Replication code for *Reddit's Pulse on US Inflation: Forecasting with Large
 Language Models*.
 
-We read inflation narratives off Reddit with fine-tuned and large language
-models, turn them into daily indicators, and ask whether they help forecast and
+We read inflation narratives off Reddit with fine-tuned large language models,
+turn them into daily indicators, and evaluate whether they help forecast and
 nowcast US inflation.
 
 <p align="center">
@@ -16,19 +16,17 @@ content in economics and finance subreddits. Each item is labelled by an LLM,
 the labels are aggregated into a daily signal per subreddit, and those signals
 enter an AR-X(1) forecasting model.
 
-The indicators track inflation closely. The fan shows the distribution across
-all model–subreddit–window combinations, z-scored, with the target in black.
+Indicators chart is shown below:
 
 <p align="center">
   <img src="images/descriptive_chart_CPIAUCSL.png" width="49%" alt="Reddit indicators and CPI">
   <img src="images/descriptive_chart_PCEPILFE.png" width="49%" alt="Reddit indicators and core PCE">
 </p>
 
-## Quick start
+Everything runs on the aggregated data shipped in `data/`. Reddit conversations
+are not needed to reproduce the results.
 
-Everything runs on the **aggregated** data shipped in `data/`. No Reddit post
-titles or comment bodies are distributed with this repository, and none are
-needed to reproduce the results.
+## Quick start
 
 ```bash
 python -m pip install -r requirements.txt
