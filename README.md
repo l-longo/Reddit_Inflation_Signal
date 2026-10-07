@@ -34,10 +34,11 @@ bash run_all.sh          # every result, table and figure (~2h30 on 2 cores)
 ```
 
 `run_all.sh` writes model output to `results/` and `data_fed_nowcast/`, then
-calls `paper_objects.py`, which prints the paper's tables and saves its figures
-to `figures_paper/`.
+calls `paper_objects.py`, which prints the tables of the main text and saves its
+figures to `figures_paper/`.
 
-To redo only the tables and figures from results already on disk:
+To redo only the tables and figures from results already on disk (a few
+seconds):
 
 ```bash
 python paper_objects.py              # prints the tables, shows and saves the figures
@@ -57,7 +58,7 @@ python check_results_forecast.py --target CPIAUCSL --export --mad --mae
 cd ../nowcast_codes
 python new_codes_real_time.py --target PCEPILFE --cutoffs 5 10 14 22 --save
 python new_codes_real_time_llama70B.py --target PCEPILFE --cutoffs 5 10 14 22 --save
-python fed_nowcast_results.py --target PCEPILFE --cutoffs 5 10 14 22
+python nowcast_charts.py                     # comparison with the Cleveland Fed nowcast
 ```
 
 Common flags: `--target {PCEPILFE,CPIAUCSL}`, `--horizons 1 6 12`,
@@ -70,7 +71,7 @@ data/              the aggregated inputs (see below)
 data_fed_nowcast/  Cleveland Fed inflation nowcast files, an input
 forecast_codes/    the multi-horizon forecasting exercise
 nowcast_codes/     the within-month nowcasting exercise
-paper_objects.py   rebuilds the paper's tables and figures in one pass
+paper_objects.py   rebuilds the tables and figures of the main text in one pass
 run_all.sh         runs everything end to end
 _build/            how data/ was produced from the raw Reddit files
 ```
@@ -89,6 +90,7 @@ and are not tracked.
 | `daily_signals_rt_finetuned.csv` | the same fine-tuned signals under the **real-time** aggregation used for the nowcast |
 | `daily_signals_rt_llama70b.csv` | the same, for Llama-3.3-70B |
 | `CPIAUCSL_2.xlsx`, `PCEPILFE_2.xlsx` | ALFRED real-time vintages of the target, used by the nowcast |
+| `mcs/test_mcs_1000_{h}_{target}_new.xlsx` | Model Confidence Set at each horizon (B = 1,000): the models left in the set and their p-values |
 
 The daily CSVs are counts and averages of model labels — one number per
 subreddit per day — so they contain no Reddit text.
@@ -101,9 +103,11 @@ the submission.
 
 The macro block (CPIAUCSL, PCEPILFE, MICH, EXPINF1YR, 2002-01 to 2025-08) is
 frozen inside `df_jae_reddit.xlsx`, so the scripts run offline and no API key is
-needed. Passing `--fred-key YOUR_KEY` pulls the current vintage instead; results
-will differ slightly wherever the series have since been revised. A free key is
-available at <https://fred.stlouisfed.org/docs/api/api_key.html>.
+needed. CPI is taken from the ALFRED vintage of 11 September 2025, the one
+behind the published results; later vintages revise CPI from 2021 onward and
+move some CPI ratios in the third decimal. Passing `--fred-key YOUR_KEY` pulls
+the current vintage instead, with the same caveat. A free key is available at
+<https://fred.stlouisfed.org/docs/api/api_key.html>.
 
 Quick look at the data:
 
@@ -129,17 +133,9 @@ Replace `'trend'` with `'llama70'` for the Llama-70B signals, and
 
 ## paper_objects.py
 
-Rebuilds, in one pass, the objects the manuscript reports:
-
-- the two forecast tables of RMSE ratios (CPI and PCE), as text and as LaTeX,
-  together with the model selected as *best* at each horizon;
-- the joint nowcast table of RMSE and MAE ratios;
-- the forecast fluctuation test at h = 1 for both targets;
-- the nowcast fluctuation test at CPI +14 days and PCE +22 days, each at
-  mu = 0.1 and mu = 0.2;
-- the ten-period moving average of the nowcast loss differential against AR(1).
-
-Figures are written under the file names the manuscript includes them by.
+Reproduces the tables and figures of the main text of the paper. Tables are
+printed as text and as LaTeX; figures are saved in `figures_paper/` under the
+file names the manuscript uses.
 
 ## forecast_codes/
 
@@ -149,6 +145,11 @@ Figures are written under the file names the manuscript includes them by.
 - `check_results_forecast.py` — RMSE / MAE / MAD ratios against the AR
   benchmark with Diebold–Mariano tests, and the fluctuation-test chart at every
   horizon
+- `forecast_charts.py` — Figures 6 and 7 (CSSED and fluctuation test)
+- `mcs_figures.py` — Figure 8. Reads the MCS results in `data/mcs/`, classifies
+  every model in the set by family, subreddit and moving-average window, writes
+  the summary workbooks `results/test_MCS/mcs-summary-{cpi,pce}-h1-h18.xlsx`,
+  checks that the counts reconcile with the member lists, and draws the heatmap
 - `_common.py` — data loaders, Diebold–Mariano test, fluctuation test,
   discounted-MSFE combination. The nowcast scripts import it from here.
 
@@ -158,8 +159,9 @@ Figures are written under the file names the manuscript includes them by.
 - `new_codes_real_time_llama70B.py` — the same from Llama-3.3-70B (it imports
   the estimation loop from the script above; the two differ only in the input
   file and the output names)
-- `fed_nowcast_results.py` — comparison against the Cleveland Fed nowcast and
-  the AR(1) benchmark
+- `nowcast_charts.py` — comparison against the Cleveland Fed nowcast: RMSE and
+  MAE ratios against AR(1) at every cutoff, with Diebold–Mariano stars, and
+  Figures 9 and 10
 
 A cutoff is the day of month *t+1* up to which Reddit content is used. CPI is
 released mid-month, so only +5, +10 and +14 keep that content strictly prior to

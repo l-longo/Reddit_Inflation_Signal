@@ -1,23 +1,24 @@
 """
-paper_objects.py  --  rebuild the paper's tables and figures in one pass
-========================================================================
+paper_objects.py  --  rebuild the tables and figures of the main text in one pass
+================================================================================
 
-Reads only what the forecast and nowcast scripts have already written and
-produces, for CPI (headline) and PCE (core):
+Reads only what the forecast and nowcast scripts have already written (and the
+MCS results shipped in data/mcs/) and produces, for CPI (headline) and PCE (core):
 
-  TABLES
+  TABLES (printed as text and as LaTeX)
     tab:rmse_cpi / tab:rmse_pce   Forecast results (RMSE ratios), 7 rows x 9 horizons
     tab:nowc_joint                Nowcast results, RMSE and MAE ratios, by cutoff
 
-  FIGURES
-    fig:fluctuation_tests         forecast fluctuation test at h = 1, both targets
-    fig:f_stat_nowcast            nowcast fluctuation test, CPI +14d and PCE +22d,
-                                  each at mu = 0.1 and mu = 0.2
-    fig:cumloss_nowcast           10-period moving average of the nowcast loss
-                                  differential vs AR(1), CPI +14d and PCE +22d
+  FIGURES (saved under the file names the manuscript includes)
+    Figure 6   fig:cssed_pce_cpi_h1       rev/cssed_{1,6}_{target}.jpg
+    Figure 7   fig:fluctuation_tests      rev/fluctuation_test_1_{target}.jpg
+    Figure 8   fig:mcs-cpi-pce-combined   mcs/MCS_heatmap_CPI_PCE_h1_h18_new.png
+    Figure 9   fig:f_stat_nowcast         fluctuation_test_nowcasts_{target}_{cutoff}_{10,25}_new.pdf
+    Figure 10  fig:cumloss_nowcast        cumloss_nowcasts_{target}_{cutoff}_new.pdf
 
-Each table is printed as text and as a LaTeX body; each figure is written both
-under the file name the manuscript includes and as a combined preview png.
+The figures are drawn by forecast_codes/forecast_charts.py,
+forecast_codes/mcs_figures.py and nowcast_codes/nowcast_charts.py, which can
+also be run on their own. Figure 4 is in images/.
 
 Cutoffs: CPI is released mid-month, so only +5/+10/+14 keep the Reddit
 information strictly prior to the release; PCE is released later and also
@@ -25,8 +26,8 @@ allows +22. That is why the CPI panel has no +22 column.
 
 Usage
 -----
-    python paper_objects.py
-    python paper_objects.py --results results --nowcast-dir data_fed_nowcast
+    python paper_objects.py              # tables + figures, figures shown on screen
+    python paper_objects.py --no-show    # save the figures without opening them
 """
 
 import argparse
@@ -40,13 +41,16 @@ import matplotlib
 # display) to skip the windows; the backend must be chosen before pyplot loads.
 if "--no-show" in sys.argv:
     matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "forecast_codes"))
-from _common import MEND, dm_test, ensure_dirs, fluctuation_test, star  # noqa: E402
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_HERE, "nowcast_codes"))
+sys.path.insert(0, os.path.join(_HERE, "forecast_codes"))
+from _common import MEND, dm_test, ensure_dirs, star  # noqa: E402
+import forecast_charts  # noqa: E402
+import mcs_figures  # noqa: E402
+import nowcast_charts  # noqa: E402
 
 warnings.filterwarnings("ignore")
 
@@ -57,19 +61,17 @@ TARGETS = [("CPIAUCSL", "CPI (headline)"), ("PCEPILFE", "PCE (core)")]
 
 # cutoffs that keep Reddit information strictly before the official release
 CUTOFFS = {"CPIAUCSL": [5, 10, 14], "PCEPILFE": [5, 10, 14, 22]}
-# cutoff used in the figures, per target
-FIG_CUTOFF = {"CPIAUCSL": 14, "PCEPILFE": 22}
 
 AGG = {"aggregated_pred", "aggregated_pred_swap", "aggregated_pred_exp",
        "aggregated_pred_llama", "aggregated_pred_sent", "pred_ar"}
 
 ROWS = ["Michigan Survey", "1-Y Inflation Swap", "Best sentiment",
-        "LLM forecast aggregation", "Best fine-tuned LLM",
-        "Llama70B forecast aggregation", "Best Llama70B"]
+        "Aggr-RIS", "Best fine-tuned LLM",
+        "Aggr-LLaMA70B", "Best LLaMA 70B"]
 
 GROUPS = [("Expectations", ROWS[0:2]),
-          ("Reddit-sentiment", ROWS[2:3]),
-          ("Reddit-LLM", ROWS[3:7])]
+          ("Lexicon-based sentiment", ROWS[2:3]),
+          ("RIS-based models", ROWS[3:7])]
 
 
 # --------------------------------------------------------------------------
@@ -103,7 +105,7 @@ def fmt(v, s):
 def forecast_table(results, target, tag):
     vals = {r: [] for r in ROWS}
     stars = {r: [] for r in ROWS}
-    picks = {r: [] for r in ["Best sentiment", "Best fine-tuned LLM", "Best Llama70B"]}
+    picks = {r: [] for r in ["Best sentiment", "Best fine-tuned LLM", "Best LLaMA 70B"]}
 
     for h in HORIZONS:
         L = pd.read_csv(f"{results}/loss_{h}_{target}{tag}.csv", index_col=0)
@@ -117,8 +119,8 @@ def forecast_table(results, target, tag):
 
         put("Michigan Survey", L["aggregated_pred_exp"], b)
         put("1-Y Inflation Swap", L["aggregated_pred_swap"], b)
-        put("LLM forecast aggregation", L["aggregated_pred"], b)
-        put("Llama70B forecast aggregation", M["aggregated_pred"], bm)
+        put("Aggr-RIS", L["aggregated_pred"], b)
+        put("Aggr-LLaMA70B", M["aggregated_pred"], bm)
 
         n, _ = best_individual(S, bs)
         picks["Best sentiment"].append(n); put("Best sentiment", S[n], bs)
@@ -127,25 +129,25 @@ def forecast_table(results, target, tag):
         picks["Best fine-tuned LLM"].append(n); put("Best fine-tuned LLM", L[n], b)
 
         n, _ = best_individual(M, bm, ("expect_", "swap_"))
-        picks["Best Llama70B"].append(n); put("Best Llama70B", M[n], bm)
+        picks["Best LLaMA 70B"].append(n); put("Best LLaMA 70B", M[n], bm)
 
     return vals, stars, picks
 
 
 def print_forecast_table(target, nice, vals, stars, picks):
     print()
-    print("=" * 104)
+    print("=" * 113)
     print(f"  Forecast results (RMSE ratios) for {nice}      [tab:rmse_"
           f"{'cpi' if target == 'CPIAUCSL' else 'pce'}]")
-    print("=" * 104)
-    print("".ljust(32) + "".join(f"h={h}".rjust(8) for h in HORIZONS))
-    print("-" * 104)
+    print("=" * 113)
+    print("".ljust(32) + "".join(f"h={h}".rjust(9) for h in HORIZONS))
+    print("-" * 113)
     for gname, grows in GROUPS:
         print(f"  -- {gname} --")
         for r in grows:
             print("  " + r.ljust(30)
-                  + "".join(fmt(v, s).rjust(8) for v, s in zip(vals[r], stars[r])))
-    print("-" * 104)
+                  + "".join(fmt(v, s).rjust(9) for v, s in zip(vals[r], stars[r])))
+    print("-" * 113)
     print("  Best model picked at each horizon:")
     for k, v in picks.items():
         print(f"    {k}:")
@@ -218,14 +220,14 @@ def nowcast_table(df_fed, nowcast_dir, llm_sfx, llama_sfx, start, end):
     for target, _ in TARGETS:
         res[target] = {"RMSE": {}, "MAE": {}}
         for metric in ("RMSE", "MAE"):
-            for row in ("LLM forecast aggregation", "Llama70B forecast aggregation"):
+            for row in ("Aggr-RIS", "Aggr-LLaMA70B"):
                 res[target][metric][row] = []
         for cutoff in CUTOFFS[target]:
             cmp_ = comparison_frame(df_fed, nowcast_dir, target, cutoff,
                                     llm_sfx, llama_sfx, start, end)
             e_b = cmp_.inflation - cmp_.pred_ar
-            for row, col in [("LLM forecast aggregation", "aggregated_pred"),
-                             ("Llama70B forecast aggregation", "aggregated_pred_llama")]:
+            for row, col in [("Aggr-RIS", "aggregated_pred"),
+                             ("Aggr-LLaMA70B", "aggregated_pred_llama")]:
                 e_m = cmp_.inflation - cmp_[col]
                 r = np.sqrt((e_m ** 2).mean() / (e_b ** 2).mean())
                 m = e_m.abs().mean() / e_b.abs().mean()
@@ -240,10 +242,10 @@ def nowcast_table(df_fed, nowcast_dir, llm_sfx, llama_sfx, start, end):
 
 def print_nowcast_table(res):
     print()
-    print("=" * 104)
+    print("=" * 113)
     print("  Nowcast results: RMSE and MAE ratios relative to the AR(1) benchmark"
           "      [tab:nowc_joint]")
-    print("=" * 104)
+    print("=" * 113)
     allc = [5, 10, 14, 22]
     for panel, (target, nice) in zip("AB", TARGETS):
         print(f"\n  Panel {panel} — {nice}")
@@ -251,8 +253,8 @@ def print_nowcast_table(res):
               + "".join(f"+{c} days".rjust(12) for c in allc))
         print("    " + "-" * 86)
         for metric in ("RMSE", "MAE"):
-            for j, row in enumerate(("LLM forecast aggregation",
-                                     "Llama70B forecast aggregation")):
+            for j, row in enumerate(("Aggr-RIS",
+                                     "Aggr-LLaMA70B")):
                 cells = ""
                 for c in allc:
                     if c in CUTOFFS[target]:
@@ -283,7 +285,7 @@ def latex_nowcast_table(res):
             out.append(r"\midrule")
         for metric in ("RMSE", "MAE"):
             out.append(rf"\multirow{{2}}{{*}}{{{metric}}}")
-            for row in ("LLM forecast aggregation", "Llama70B forecast aggregation"):
+            for row in ("Aggr-RIS", "Aggr-LLaMA70B"):
                 cells = []
                 for c in allc:
                     if c in CUTOFFS[target]:
@@ -298,133 +300,11 @@ def latex_nowcast_table(res):
 
 
 # --------------------------------------------------------------------------
-# 3. figures
-# --------------------------------------------------------------------------
-def _finish(path, show):
-    plt.savefig(path, dpi=300)
-    if show:
-        plt.show()
-    plt.close()
-
-
-def fig_fluctuation_forecast(results, tag, figdir, h=1, m=10, show=True):
-    paths = []
-    for target, _ in TARGETS:
-        res = pd.read_csv(f"{results}/llm/df_tuning_{h}_{target}{tag}.csv", index_col=0)
-        res_l = pd.read_csv(f"{results}/llm/df_tuning_{h}_{target}_llama70{tag}.csv",
-                            index_col=0)
-        res_ar = pd.read_csv(f"{results}/sentiment/df_sentiment_{h}_{target}{tag}.csv",
-                             index_col=0)
-        res_sw = pd.read_csv(f"{results}/swap/df_tuning_swap_{h}_{target}{tag}.csv",
-                             index_col=0)
-        res_ex = pd.read_csv(
-            f"{results}/expectation/df_tuning_exp_{h}_{target}{tag}.csv", index_col=0)
-        true = pd.read_csv(f"{results}/df_true_{h}_{target}{tag}.csv", index_col=0)
-
-        actual, y1 = true["inflation"], res_ar["pred_ar"]
-        P = res_ar["pred_ar"].shape[0]
-        F_swap, _ = fluctuation_test(res_sw["aggregated_pred_swap"], y1, actual, m, P)
-        F_exp, _ = fluctuation_test(res_ex["aggregated_pred_exp"], y1, actual, m, P)
-        F_llm, _ = fluctuation_test(res["aggregated_pred"], y1, actual, m, P)
-        F_lla, _ = fluctuation_test(res_l["aggregated_pred"], y1, actual, m, P)
-
-        x = pd.to_datetime(actual.index[m - 1:])
-        plt.figure(figsize=(8, 4))
-        plt.plot(x, F_swap, marker=".", linestyle=":", label="F-statistics, Inflation-swap")
-        plt.plot(x, F_exp, marker=".", linestyle="-", label="F-statistics, Michigan expectations")
-        plt.plot(x, F_llm, marker=".", linestyle=":", label="F-statistics, Reddit-LLM")
-        plt.plot(x, F_lla, marker=".", linestyle=":", label="F-statistics, Llama70B")
-        plt.axhline(y=3.176, linestyle="--", color="red", alpha=0.7, label="critical value")
-        plt.xlabel("Date", fontsize=14)
-        plt.ylabel("F-statistic", fontsize=14)
-        plt.title(f"{h}-month-ahead Fluctuation Test. Target = {target[:3]}", fontsize=14)
-        plt.legend(frameon=False, loc="best", fontsize=8)
-        plt.grid(True, linestyle="--", alpha=0.5)
-        plt.tight_layout()
-        p = f"{figdir}/fluctuation_test_{h}_{target}.jpg"
-        _finish(p, show); paths.append(p)
-    return paths
-
-
-def fig_nowcast(df_fed, nowcast_dir, figdir, llm_sfx, llama_sfx, start, end,
-                fed_mae_headline=True, show=True):
-    fluct, cumloss = [], []
-    for target, _ in TARGETS:
-        cutoff = FIG_CUTOFF[target]
-        cmp_ = comparison_frame(df_fed, nowcast_dir, target, cutoff,
-                                llm_sfx, llama_sfx, start, end)
-        col_fed = (f"Core {target[:3]} Inflation" if target == "PCEPILFE"
-                   else f"{target[:3]} Inflation")
-        actual, y1 = cmp_["inflation"], cmp_["pred_ar"]
-        P = y1.shape[0]
-
-        for m in (10, 25):
-            F_llm, _ = fluctuation_test(cmp_["aggregated_pred"], y1, actual, m, P)
-            F_lla, _ = fluctuation_test(cmp_["aggregated_pred_llama"], y1, actual, m, P)
-            F_fed, _ = fluctuation_test(cmp_[col_fed], y1, actual, m, P)
-            off = m - 1 if m == 10 else m - 2
-            x = pd.to_datetime(actual.index[off:])
-            plt.figure(figsize=(8, 4))
-            plt.plot(x, F_fed, marker=".", linestyle=":", label="F-statistics, FED Nowcast")
-            plt.plot(x, F_llm, marker=".", linestyle=":", color="green",
-                     label="F-statistics, Reddit-LLM")
-            plt.plot(x, F_lla, marker=".", linestyle=":", color="red",
-                     label="F-statistics, Llama70B")
-            plt.axhline(y=3.393 if m == 10 else 3.179, linestyle="--", color="red",
-                        alpha=0.7, label="critical value")
-            plt.xlabel("Date", fontsize=14)
-            plt.ylabel(r"F-statistic, $\mathbf{\mu = 0.1}$" if m == 10
-                       else r"F-statistic, $\mathbf{\mu = 0.2}$", fontsize=14)
-            plt.title(f"Nowcasts comparison. Cutoff = {cutoff} days. {target[:3]}.",
-                      fontsize=14)
-            plt.legend(frameon=False, loc="best", fontsize=10)
-            plt.grid(True, linestyle="--", alpha=0.5)
-            plt.tight_layout()
-            p = f"{figdir}/fluctuation_test_nowcasts_{target}_{cutoff}_{m}_new.pdf"
-            _finish(p, show); fluct.append(p)
-
-        # cumulative-loss chart
-        base = (actual - y1).rolling(10, center=True).mean()
-        e = lambda c: (actual - cmp_[c]).rolling(10, center=True).mean() - base
-        rr = lambda c, q: (np.sqrt(((actual - cmp_[c]) ** 2).mean() /
-                                   ((actual - y1) ** 2).mean()) if q == 2
-                           else (actual - cmp_[c]).abs().mean() / (actual - y1).abs().mean())
-        # The notebook computes the Fed RMSE on `Core PCE Inflation` but the Fed
-        # MAE on headline `PCE Inflation`. Kept by default so the figure matches
-        # the published one (it is what gives MAE = 2.524 in the PCE panel);
-        # --fix-fed-mae uses the core series for both.
-        lab = {}
-        for c in (col_fed, "aggregated_pred", "aggregated_pred_llama"):
-            c_mae = (f"{target[:3]} Inflation"
-                     if (c == col_fed and fed_mae_headline) else c)
-            r2 = rr(c, 2)
-            r1 = (actual - cmp_[c_mae]).abs().mean() / (actual - y1).abs().mean()
-            dm2, p2 = dm_test((actual - cmp_[c]) ** 2, (actual - y1) ** 2, h=1)
-            dm1, p1 = dm_test((actual - cmp_[c_mae]).abs(), (actual - y1).abs(), h=1)
-            lab[c] = (f"RMSE = {r2:.3f}{star(p2, r2 < 1)}, "
-                      f"MAE = {r1:.3f}{star(p1, r2 < 1)}")
-
-        plt.figure(figsize=(8, 4))
-        plt.plot(cmp_.index, e(col_fed), label=f"FED Nowcast: {lab[col_fed]}")
-        plt.plot(cmp_.index, e("aggregated_pred"), color="green",
-                 label=f"llm nowcast: {lab['aggregated_pred']}")
-        plt.plot(cmp_.index, e("aggregated_pred_llama"), color="red",
-                 label=f"llama nowcast: {lab['aggregated_pred_llama']}")
-        plt.axhline(0, color="black", linewidth=1, linestyle="--")
-        plt.xlabel("Date")
-        plt.legend(frameon=False)
-        plt.grid(True, linestyle="--", alpha=0.5)
-        plt.tight_layout()
-        p = f"{figdir}/cumloss_nowcasts_{target}_{cutoff}_new.pdf"
-        _finish(p, show); cumloss.append(p)
-    return fluct, cumloss
-
-
-# --------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default=os.path.join(ROOT, "results"))
     ap.add_argument("--nowcast-dir", default=os.path.join(ROOT, "data_fed_nowcast"))
+    ap.add_argument("--mcs-dir", default=os.path.join(ROOT, "data", "mcs"))
     ap.add_argument("--fig-dir", default=os.path.join(ROOT, "figures_paper"))
     ap.add_argument("--tag", default="_new")
     ap.add_argument("--llm-suffix", default="_new")
@@ -434,12 +314,10 @@ def main():
     ap.add_argument("--no-latex", action="store_true")
     ap.add_argument("--no-show", action="store_true",
                     help="save the figures without opening them on screen")
-    ap.add_argument("--fix-fed-mae", action="store_true",
-                    help="use the core series for the Fed MAE in the PCE panel of "
-                         "fig:cumloss_nowcast (the notebook uses headline there)")
     args = ap.parse_args()
 
     ensure_dirs(args.fig_dir)
+    show = not args.no_show
 
     # ---- tables ----
     latex_blocks = []
@@ -456,29 +334,43 @@ def main():
 
     # ---- figures ----
     print()
-    print("=" * 104)
+    print("=" * 113)
     print("  FIGURES")
-    print("=" * 104)
-    show = not args.no_show
-    p1 = fig_fluctuation_forecast(args.results, args.tag, args.fig_dir, show=show)
-    print("  fig:fluctuation_tests")
-    for p in p1:
-        print("    " + os.path.relpath(p, ROOT))
-    f2, f3 = fig_nowcast(df_fed, args.nowcast_dir, args.fig_dir,
-                         args.llm_suffix, args.llama_suffix, args.start, args.end,
-                         fed_mae_headline=not args.fix_fed_mae, show=show)
-    print("  fig:f_stat_nowcast")
-    for p in f2:
-        print("    " + os.path.relpath(p, ROOT))
-    print("  fig:cumloss_nowcast")
-    for p in f3:
-        print("    " + os.path.relpath(p, ROOT))
+    print("=" * 113)
+    fc = forecast_charts.run(args.results, args.fig_dir, args.tag, show)
+    if (fc.status != "ok").any():
+        print(fc.to_string(index=False))
+    mcs = mcs_figures.run(args.mcs_dir, os.path.join(args.results, "test_MCS"),
+                          args.fig_dir, show, verbose=False)
+    nowcast_charts.LLM_SUFFIX, nowcast_charts.LLAMA_SUFFIX = args.llm_suffix, args.llama_suffix
+    nowcast_charts.EVAL_START, nowcast_charts.EVAL_END = args.start, args.end
+    nc = nowcast_charts.run(args.nowcast_dir, args.fig_dir, show, metrics=False)
+
+    rel = lambda p: os.path.relpath(str(p), ROOT)
+    print("  Figure 6  fig:cssed_pce_cpi_h1")
+    for h in (1, 6):
+        for t, _ in TARGETS:
+            print("    " + rel(os.path.join(args.fig_dir, "rev", f"cssed_{h}_{t}.jpg")))
+    print("  Figure 7  fig:fluctuation_tests")
+    for t, _ in TARGETS:
+        print("    " + rel(os.path.join(args.fig_dir, "rev", f"fluctuation_test_1_{t}.jpg")))
+    print("  Figure 8  fig:mcs-cpi-pce-combined")
+    for p in mcs:
+        print("    " + rel(p))
+    print("  Figure 9  fig:f_stat_nowcast")
+    for p in nc:
+        if "fluctuation" in str(p):
+            print("    " + rel(p))
+    print("  Figure 10 fig:cumloss_nowcast")
+    for p in nc:
+        if "cumloss" in str(p):
+            print("    " + rel(p))
 
     if not args.no_latex:
         print()
-        print("=" * 104)
+        print("=" * 113)
         print("  LATEX")
-        print("=" * 104)
+        print("=" * 113)
         for b in latex_blocks:
             print()
             print(b)

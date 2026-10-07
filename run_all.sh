@@ -40,17 +40,16 @@ run "nc_ft_PCEPILFE"    "$NC" python3 -u new_codes_real_time.py \
       --target PCEPILFE --cutoffs 5 10 14 22 --save
 run "nc_llama_PCEPILFE" "$NC" python3 -u new_codes_real_time_llama70B.py \
       --target PCEPILFE --cutoffs 5 10 14 22 --save
-run "nc_fed_PCEPILFE"   "$NC" python3 -u fed_nowcast_results.py \
-      --target PCEPILFE --cutoffs 5 10 14 22 --no-figures
 
 run "nc_ft_CPIAUCSL"    "$NC" python3 -u new_codes_real_time.py \
       --target CPIAUCSL --cutoffs 5 10 14 --save
 run "nc_llama_CPIAUCSL" "$NC" python3 -u new_codes_real_time_llama70B.py \
       --target CPIAUCSL --cutoffs 5 10 14 --save
-run "nc_fed_CPIAUCSL"   "$NC" python3 -u fed_nowcast_results.py \
-      --target CPIAUCSL --cutoffs 5 10 14 --no-figures
 
-# ---------------- tables and figures of the paper ----------------
+# comparison with the Cleveland Fed nowcast, every cutoff (also draws Figures 9-10)
+run "nc_fed"            "$NC" python3 -u nowcast_charts.py
+
+# ---------------- tables and figures of the main text ----------------
 run "paper_objects" "$ROOT" python3 -u paper_objects.py --no-show
 
 echo "[$(date -u +%H:%M:%S)] ALL DONE" | tee -a "$PROGRESS"

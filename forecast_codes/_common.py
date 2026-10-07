@@ -49,7 +49,9 @@ def load_macro(xlsx_path, target):
         inflation  12-month log change of infl
         expect     MICH, lagged one month
         swap       EXPINF1YR
-    Sample 2002-01 .. 2025-08, month-end index.
+    Sample 2002-01 .. 2025-08, month-end index. CPIAUCSL is the ALFRED
+    vintage of 2025-09-11 (column CPIAUCSL_20250911 of CPIAUCSL_2.xlsx), the
+    one behind the published tables.
     """
     suffix = TARGET_SUFFIX[target]
     dfx = pd.read_excel(xlsx_path, index_col=0)
