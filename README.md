@@ -19,8 +19,8 @@ enter an AR-X(1) forecasting model.
 Indicators chart is shown below:
 
 <p align="center">
-  <img src="images/descriptive_chart_CPIAUCSL.png" width="49%" alt="Reddit indicators and CPI">
-  <img src="images/descriptive_chart_PCEPILFE.png" width="49%" alt="Reddit indicators and core PCE">
+  <img src="images/descriptive_chart_CPIAUCSL.png" width="49%" alt="RIS variants and CPI">
+  <img src="images/descriptive_chart_PCEPILFE.png" width="49%" alt="RIS variants and core PCE">
 </p>
 
 Everything runs on the aggregated data shipped in `data/`. Reddit conversations
